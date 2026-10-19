@@ -38,7 +38,7 @@ async function setup(page, shouldFail = false) {
     let routeListener = null;
     window.testSetRoute = (pathname) => {
       route = pathname;
-      document.querySelector('aside').style.display = pathname === '/song/1' || pathname === '/' ? '' : 'none';
+      document.querySelector('aside').style.display = pathname === '/' ? '' : 'none';
       routeListener?.();
     };
     window.testSetVinylVisible = (visible) => {
@@ -150,8 +150,6 @@ test("hot comments, replies, dynamic load, toggle and unload", async () => {
     await page.locator("#bnem-comment-filter-panel input").check();
     assert.equal(await page.locator("#hot").evaluate((el) => getComputedStyle(el).display), "none");
 
-    await page.evaluate(() => window.testSetRoute("/song/1"));
-    await page.waitForFunction(() => getComputedStyle(document.getElementById("song-comment")).display === "none");
     await page.evaluate(() => window.testSetRoute("/"));
     assert.equal(await page.locator("#song-comment").evaluate((el) => getComputedStyle(el).display), "none");
     await page.evaluate(() => window.testSetRoute("/search"));
@@ -239,6 +237,36 @@ test("hidden virtualized comments release their cached row height", async () => 
     await page.locator("#bnem-comment-filter-panel input").uncheck();
     await page.waitForFunction(() => document.getElementById("normal").parentElement.offsetTop === 80);
     assert.equal(await page.locator("#comments").evaluate((el) => el.offsetHeight), 160);
+  } finally { await browser.close(); }
+});
+
+test("song comment page filters its own cards on the client's real route", async () => {
+  const browser = await chromium.launch({ executablePath, headless: true,
+    args: ["--no-sandbox"] });
+  try {
+    const page = await browser.newPage();
+    await setup(page);
+    await page.waitForFunction(() => window.BetterNEMCommentFilter.getState().state === "ready");
+    await page.evaluate(() => {
+      const scroll = document.createElement("main");
+      scroll.dataset.testid = "tid_scroll_container";
+      scroll.innerHTML = `<section data-testid="tid_comment_page" id="page_pc_songplay_comment">
+        <div id="song-blocked" data-testid="tid_comment_card">blocked song comment</div>
+        <div id="song-normal" data-testid="tid_comment_card">normal song comment</div>
+      </section>`;
+      document.body.append(scroll);
+      for (const [id, userId] of [["song-blocked", 42], ["song-normal", 7]]) {
+        document.getElementById(id)["__reactFiber$fixture"] = { memoizedProps: {}, return: {
+          memoizedProps: { comment: { user: { id: userId }, beReplied: [] } }, return: null
+        } };
+      }
+      window.testSetRoute("/comment/R_SO_4_1");
+    });
+    await page.waitForFunction(() => getComputedStyle(document.getElementById("song-blocked")).display === "none");
+    assert.notEqual(await page.locator("#song-normal").evaluate((el) => getComputedStyle(el).display), "none");
+    assert.notEqual(await page.locator("#hot").evaluate((el) => getComputedStyle(el).display), "none");
+    await page.evaluate(() => window.testSetRoute("/search"));
+    await page.waitForFunction(() => getComputedStyle(document.getElementById("song-blocked")).display !== "none");
   } finally { await browser.close(); }
 });
 

@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "name": "BetterNEM 评论过滤",
   "slug": "betternem-comment-filter",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "betterncm_version": ">=1.3.1",
   "ncm-version-req": "=3.1.41",
   "ncm3-compatible": true,

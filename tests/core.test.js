@@ -21,8 +21,10 @@ test("album route is scoped to the installed client's /album/:id path", () => {
 
 test("comment routes include song pages but exclude unrelated pages", () => {
   assert.equal(api.isCommentPath("/album/123"), true);
-  assert.equal(api.isCommentPath("/song/456"), true);
-  assert.equal(api.isCommentPath("/song/456/comments"), true);
+  assert.equal(api.isCommentPath("/comment/R_SO_4_456"), true);
+  assert.equal(api.isCommentPath("/comment/R_SO_4_456/789"), true);
+  assert.equal(api.isCommentPath("/comment/R_MV_5_456"), false);
+  assert.equal(api.isCommentPath("/song/456"), false);
   assert.equal(api.isCommentPath("/search/456"), false);
 });
 

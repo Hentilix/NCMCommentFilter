@@ -16,6 +16,7 @@
 
   const CARD_SELECTOR = '[data-testid="tid_comment_card"]';
   const ALBUM_CONTAINER = '[data-testid="tid_scroll_container"]';
+  const SONG_CONTAINER = '[data-testid="tid_comment_page"]';
   const VINYL_CONTAINER = '[data-testid="tid_vinyl_commentarea"]';
   const HIDDEN_CLASS = "bnem-comment-hidden";
   const STYLE_ID = "bnem-comment-filter-style";
@@ -49,7 +50,7 @@
   }
 
   function isCommentPath(path) {
-    return isAlbumPath(path) || /^\/song\/\d+(?:\/|$)/.test(path || "");
+    return isAlbumPath(path) || /^\/comment\/R_SO_4_\d+(?:\/\d+)?\/?$/.test(path || "");
   }
 
   function isCurrentFiber(fiber) {
@@ -217,7 +218,8 @@
 
     function cardInScope(card) {
       if (card.closest(VINYL_CONTAINER)) return !!scope?.includes("vinyl");
-      return !!scope && scope !== "vinyl" && !!card.closest(ALBUM_CONTAINER);
+      if (scope?.startsWith("song")) return !!card.closest(SONG_CONTAINER);
+      return !!scope?.startsWith("album") && !!card.closest(ALBUM_CONTAINER) && !card.closest(SONG_CONTAINER);
     }
 
     function syncScope() {
@@ -350,7 +352,7 @@
     function scanAll() {
       if (!active || !enabled || !blacklist) return;
       unknownCards = 0;
-      doc.querySelectorAll(`${ALBUM_CONTAINER} ${CARD_SELECTOR}, ${VINYL_CONTAINER} ${CARD_SELECTOR}`).forEach(filterCard);
+      doc.querySelectorAll(`${ALBUM_CONTAINER} ${CARD_SELECTOR}, ${SONG_CONTAINER} ${CARD_SELECTOR}, ${VINYL_CONTAINER} ${CARD_SELECTOR}`).forEach(filterCard);
       if (unknownCards) setState("partial", `已同步；${unknownCards} 条评论或回复无法读取用户 ID`);
       else if (state === "partial") setState("ready", `已同步 ${blacklist.size} 位黑名单用户`);
       updateCount();
@@ -443,6 +445,7 @@
       style.textContent = `
         .${HIDDEN_CLASS}{display:none!important}
         html.bnem-comment-pending ${ALBUM_CONTAINER} ${CARD_SELECTOR},
+        html.bnem-comment-pending ${SONG_CONTAINER} ${CARD_SELECTOR},
         html.bnem-comment-pending ${VINYL_CONTAINER} ${CARD_SELECTOR}{visibility:hidden!important}
         #${PANEL_ID}{position:fixed;right:18px;bottom:110px;z-index:2147483000;width:218px;
           padding:10px 12px;border-radius:10px;background:rgba(34,34,34,.94);color:#fff;

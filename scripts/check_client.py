@@ -22,6 +22,9 @@ def main() -> int:
         "评论卡片标记": ("pub/hybrid/app.chunk.c6406e5.js", b'data-testid":"tid_comment_card"'),
         "回复数据": ("pub/hybrid/app.chunk.c6406e5.js", b'beReplied:V'),
         "专辑页面路由": ("pub/hybrid/57.chunk.c6406e5.js", b'G("/album/:id")'),
+        "单曲评论线程路径": ("pub/hybrid/app.chunk.c6406e5.js", b'"R_SO_4_".concat(e)'),
+        "单曲评论页面标记": ("pub/hybrid/74.chunk.c6406e5.js", b'data-testid":"tid_comment_page"'),
+        "单曲评论卡片组件": ("pub/hybrid/74.chunk.c6406e5.js", b'I=n(439)'),
     }
     print("仅检查安装包基线 c6406e5；运行时可能使用不同热更新，不能据此判定实时兼容。")
     try:
