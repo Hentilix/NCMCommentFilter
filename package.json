@@ -1,0 +1,13 @@
+{
+  "name": "betternem-comment-filter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BetterNCM album comment filter for NetEase Cloud Music 3.1.41.205529",
+  "scripts": {
+    "test": "node --test tests/core.test.js",
+    "test:browser": "node --test tests/browser.test.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.1"
+  }
+}
