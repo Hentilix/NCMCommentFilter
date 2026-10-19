@@ -1,4 +1,4 @@
-/* BetterNEM phase 1. No credentials or blacklist data are persisted or sent to third parties. */
+/* BetterNEM comment filter. No credentials or blacklist data are persisted or sent to third parties. */
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -16,6 +16,7 @@
 
   const CARD_SELECTOR = '[data-testid="tid_comment_card"]';
   const ALBUM_CONTAINER = '[data-testid="tid_scroll_container"]';
+  const VINYL_CONTAINER = '[data-testid="tid_vinyl_commentarea"]';
   const HIDDEN_CLASS = "bnem-comment-hidden";
   const STYLE_ID = "bnem-comment-filter-style";
   const PANEL_ID = "bnem-comment-filter-panel";
@@ -45,6 +46,10 @@
 
   function isAlbumPath(path) {
     return /^\/album\/\d+(?:\/|$)/.test(path || "");
+  }
+
+  function isCommentPath(path) {
+    return isAlbumPath(path) || /^\/song\/\d+(?:\/|$)/.test(path || "");
   }
 
   function isCurrentFiber(fiber) {
@@ -185,6 +190,10 @@
     let generation = 0;
     let hidden = new Set();
     let unknownCards = 0;
+    let scope = null;
+    let measureFrame = null;
+    const measureQueue = new Set();
+    const collapsedRows = new Map();
 
     function currentPath() {
       const fromSource = source?.getPath?.();
@@ -194,18 +203,89 @@
       return match ? match[1] : win.location?.pathname || "";
     }
 
-    function isAlbum() { return isAlbumPath(currentPath()); }
+    function currentScope() {
+      const path = currentPath();
+      const vinyl = doc.querySelector(VINYL_CONTAINER);
+      let vinylVisible = false;
+      if (vinyl && vinyl.getClientRects().length) {
+        const rect = vinyl.getBoundingClientRect();
+        vinylVisible = rect.bottom > 0 && rect.top < win.innerHeight;
+      }
+      const page = isAlbumPath(path) ? "album" : isCommentPath(path) ? "song" : "";
+      return page ? `${page}${vinylVisible ? "+vinyl" : ""}` : vinylVisible ? "vinyl" : null;
+    }
+
+    function cardInScope(card) {
+      if (card.closest(VINYL_CONTAINER)) return !!scope?.includes("vinyl");
+      return !!scope && scope !== "vinyl" && !!card.closest(ALBUM_CONTAINER);
+    }
+
+    function syncScope() {
+      const next = currentScope();
+      if (next === scope) return;
+      restoreAll();
+      scope = next;
+      render();
+      if (active) scanAll();
+    }
+
+    function flushMeasurements() {
+      measureFrame = null;
+      for (const card of measureQueue) {
+        if (!card.isConnected) continue;
+        const key = Object.keys(card).find((name) =>
+          name.startsWith("__reactFiber$") || name.startsWith("__reactInternalInstance$"));
+        let fiber = key ? card[key] : null;
+        for (let depth = 0; fiber && depth < 32; depth += 1, fiber = fiber.return) {
+          if (fiber.memoizedProps?.cache && typeof fiber.stateNode?._measure === "function") {
+            const { cache, rowIndex = 0, columnIndex = 0, parent } = fiber.memoizedProps;
+            const rowKey = `${rowIndex}:${columnIndex}`;
+            if (card.classList.contains(HIDDEN_CLASS) || card.querySelector(`.${HIDDEN_CLASS}`)) {
+              if (!collapsedRows.has(cache)) collapsedRows.set(cache, new Map());
+              collapsedRows.get(cache).set(rowKey, { rowIndex, columnIndex, parent });
+            } else {
+              collapsedRows.get(cache)?.delete(rowKey);
+            }
+            fiber.stateNode._measure();
+            break;
+          }
+        }
+      }
+      measureQueue.clear();
+    }
+
+    function queueMeasurement(card) {
+      if (!card) return;
+      measureQueue.add(card);
+      if (measureFrame == null) measureFrame = win.requestAnimationFrame(flushMeasurements);
+    }
 
     function setHidden(element, shouldHide) {
-      if (!element) return;
+      if (!element) return false;
+      const changed = element.classList.contains(HIDDEN_CLASS) !== shouldHide;
       element.classList.toggle(HIDDEN_CLASS, shouldHide);
       if (shouldHide) hidden.add(element);
       else hidden.delete(element);
+      return changed;
     }
 
     function restoreAll() {
-      for (const element of hidden) element.classList.remove(HIDDEN_CLASS);
+      for (const element of hidden) {
+        element.classList.remove(HIDDEN_CLASS);
+        queueMeasurement(element.matches(CARD_SELECTOR) ? element : element.closest(CARD_SELECTOR));
+      }
       hidden.clear();
+      const parents = new Map();
+      for (const [cache, rows] of collapsedRows) {
+        for (const { rowIndex, columnIndex, parent } of rows.values()) {
+          cache.clear(rowIndex, columnIndex);
+          if (parent && (!parents.has(parent) || rowIndex < parents.get(parent))) {
+            parents.set(parent, rowIndex);
+          }
+        }
+      }
+      collapsedRows.clear();
+      for (const [parent, rowIndex] of parents) parent.recomputeGridSize?.({ rowIndex, columnIndex: 0 });
       updateCount();
     }
 
@@ -224,7 +304,7 @@
 
     function render() {
       if (!panel) return;
-      active = isAlbum();
+      active = !!scope;
       panel.hidden = !active && state !== "error";
       toggle.checked = enabled;
       refreshButton.disabled = state === "loading" || !source;
@@ -236,34 +316,41 @@
     }
 
     function filterCard(card) {
-      if (!active || !enabled || !blacklist || !card.isConnected || !card.closest(ALBUM_CONTAINER)) return;
-      // A reused card may contain reply elements hidden for its previous data.
-      card.querySelectorAll(`.${HIDDEN_CLASS}`).forEach((element) => setHidden(element, false));
+      if (!active || !enabled || !blacklist || !card.isConnected || !cardInScope(card)) return;
+      let changed = false;
       const comment = getComment(card);
       if (!comment) {
         unknownCards += 1;
-        setHidden(card, false);
+        changed = setHidden(card, false) || changed;
+        if (changed) queueMeasurement(card);
         return;
       }
       const authorId = normalizeId(comment.user?.id);
-      setHidden(card, !!authorId && blacklist.has(authorId));
+      changed = setHidden(card, !!authorId && blacklist.has(authorId)) || changed;
       const replies = Array.isArray(comment.beReplied) ? comment.beReplied : [];
       const replyContainer = card.querySelector(".replay");
+      // Clear marks on reply nodes that no longer belong to the current reply list.
+      card.querySelectorAll(`.${HIDDEN_CLASS}`).forEach((element) => {
+        if (element.parentElement !== replyContainer || replyContainer.children.length !== replies.length) {
+          changed = setHidden(element, false) || changed;
+        }
+      });
       if (replyContainer && replyContainer.children.length === replies.length) {
         for (let index = 0; index < replies.length; index += 1) {
           const id = normalizeId(replies[index]?.user?.id);
           if (!id) unknownCards += 1;
-          setHidden(replyContainer.children[index], !!id && blacklist.has(id) && !blacklist.has(authorId));
+          changed = setHidden(replyContainer.children[index], !!id && blacklist.has(id) && !blacklist.has(authorId)) || changed;
         }
       } else if (replies.length) {
         unknownCards += 1;
       }
+      if (changed) queueMeasurement(card);
     }
 
     function scanAll() {
       if (!active || !enabled || !blacklist) return;
       unknownCards = 0;
-      doc.querySelectorAll(`${ALBUM_CONTAINER} ${CARD_SELECTOR}`).forEach(filterCard);
+      doc.querySelectorAll(`${ALBUM_CONTAINER} ${CARD_SELECTOR}, ${VINYL_CONTAINER} ${CARD_SELECTOR}`).forEach(filterCard);
       if (unknownCards) setState("partial", `已同步；${unknownCards} 条评论或回复无法读取用户 ID`);
       else if (state === "partial") setState("ready", `已同步 ${blacklist.size} 位黑名单用户`);
       updateCount();
@@ -280,13 +367,7 @@
     }
 
     function onMutations(records) {
-      const nowAlbum = isAlbum();
-      if (nowAlbum !== active) {
-        active = nowAlbum;
-        if (!active) restoreAll();
-        render();
-        if (active) scanAll();
-      }
+      syncScope();
       if (!active || !enabled || !blacklist) return;
       const cards = new Set();
       let removed = false;
@@ -305,11 +386,10 @@
     }
 
     function routeChanged() {
-      const wasActive = active;
-      active = isAlbum();
-      if (!active && wasActive) restoreAll();
+      restoreAll();
+      scope = currentScope();
       render();
-      if (active && !wasActive) scanAll();
+      if (active) scanAll();
     }
 
     async function refresh() {
@@ -362,7 +442,8 @@
       style.id = STYLE_ID;
       style.textContent = `
         .${HIDDEN_CLASS}{display:none!important}
-        html.bnem-comment-pending ${ALBUM_CONTAINER} ${CARD_SELECTOR}{visibility:hidden!important}
+        html.bnem-comment-pending ${ALBUM_CONTAINER} ${CARD_SELECTOR},
+        html.bnem-comment-pending ${VINYL_CONTAINER} ${CARD_SELECTOR}{visibility:hidden!important}
         #${PANEL_ID}{position:fixed;right:18px;bottom:110px;z-index:2147483000;width:218px;
           padding:10px 12px;border-radius:10px;background:rgba(34,34,34,.94);color:#fff;
           box-shadow:0 3px 14px #0005;font:12px/1.5 sans-serif}
@@ -414,7 +495,8 @@
       try { enabled = win.localStorage.getItem("betternem.commentFilter.enabled") !== "0"; }
       catch { enabled = true; }
       createPanel();
-      active = isAlbum();
+      scope = currentScope();
+      active = !!scope;
       setState("loading", "正在连接网易云账号…");
       observer = new win.MutationObserver(onMutations);
       observer.observe(doc.body, { childList: true, characterData: true, subtree: true });
@@ -433,6 +515,7 @@
     }
 
     function checkAccount() {
+      syncScope();
       if (!source) return;
       try { if (source.getAccountId() !== accountId) refresh(); }
       catch { refresh(); }
@@ -451,6 +534,8 @@
       win.removeEventListener("popstate", routeChanged);
       win.removeEventListener("hashchange", routeChanged);
       restoreAll();
+      if (measureFrame != null) win.cancelAnimationFrame(measureFrame);
+      flushMeasurements();
       doc.documentElement.classList.remove("bnem-comment-pending");
       panel?.remove();
       doc.getElementById(STYLE_ID)?.remove();
@@ -461,6 +546,6 @@
       accountId, blacklistSize: blacklist?.size ?? null, message: stateMessage }) };
   }
 
-  return { normalizeId, normalizeBlacklist, isAlbumPath, readCommentFromFiber,
+  return { normalizeId, normalizeBlacklist, isAlbumPath, isCommentPath, readCommentFromFiber,
     captureWebpackRequire, getClientVersion, createNeteaseSource, createController };
 });

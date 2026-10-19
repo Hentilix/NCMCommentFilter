@@ -15,7 +15,7 @@ async function setup(page, shouldFail = false) {
       <div id="with-reply" data-testid="tid_comment_card">normal parent
         <div class="replay"><span id="blocked-reply">blocked reply</span><span id="normal-reply">normal reply</span></div>
       </div>
-    </main><aside><div id="song-comment" data-testid="tid_comment_card">song comment</div></aside></body></html>`);
+    </main><aside data-testid="tid_vinyl_commentarea" style="display:none"><div id="song-comment" data-testid="tid_comment_card">song comment</div></aside></body></html>`);
   await page.evaluate((fail) => {
     const attach = (id, userId, replies = []) => {
       const card = document.getElementById(id);
@@ -36,7 +36,15 @@ async function setup(page, shouldFail = false) {
     window.testSetFailure = (value) => { fail = value; };
     let route = "/album/1";
     let routeListener = null;
-    window.testSetRoute = (pathname) => { route = pathname; routeListener?.(); };
+    window.testSetRoute = (pathname) => {
+      route = pathname;
+      document.querySelector('aside').style.display = pathname === '/song/1' || pathname === '/' ? '' : 'none';
+      routeListener?.();
+    };
+    window.testSetVinylVisible = (visible) => {
+      document.querySelector('aside').style.display = visible ? '' : 'none';
+      accountListener?.();
+    };
     const store = { getStore: () => ({ host: { uid, isAnonymous: false } }),
       app: { _store: { subscribe: (fn) => { accountListener = fn; return () => { accountListener = null; }; } } },
       getHistory: () => ({ location: { pathname: route }, listen: (fn) => { routeListener = fn; return () => { routeListener = null; }; } }) };
@@ -143,9 +151,19 @@ test("hot comments, replies, dynamic load, toggle and unload", async () => {
     assert.equal(await page.locator("#hot").evaluate((el) => getComputedStyle(el).display), "none");
 
     await page.evaluate(() => window.testSetRoute("/song/1"));
+    await page.waitForFunction(() => getComputedStyle(document.getElementById("song-comment")).display === "none");
+    await page.evaluate(() => window.testSetRoute("/"));
+    assert.equal(await page.locator("#song-comment").evaluate((el) => getComputedStyle(el).display), "none");
+    await page.evaluate(() => window.testSetRoute("/search"));
+    await page.waitForFunction(() => getComputedStyle(document.getElementById("song-comment")).display !== "none");
     assert.notEqual(await page.locator("#hot").evaluate((el) => getComputedStyle(el).display), "none");
     await page.evaluate(() => window.testSetRoute("/album/1"));
     assert.equal(await page.locator("#hot").evaluate((el) => getComputedStyle(el).display), "none");
+    assert.notEqual(await page.locator("#song-comment").evaluate((el) => getComputedStyle(el).display), "none");
+    await page.evaluate(() => window.testSetVinylVisible(true));
+    await page.waitForFunction(() => getComputedStyle(document.getElementById("song-comment")).display === "none");
+    await page.evaluate(() => window.testSetVinylVisible(false));
+    await page.waitForFunction(() => getComputedStyle(document.getElementById("song-comment")).display !== "none");
 
     await page.evaluate(() => window.testSetAccount(null));
     await page.waitForFunction(() => window.BetterNEMCommentFilter.getState().state === "error");
@@ -170,6 +188,57 @@ test("hot comments, replies, dynamic load, toggle and unload", async () => {
     assert.equal(await page.locator("#bnem-comment-filter-style").count(), 0);
     assert.equal(await page.locator("#bnem-comment-filter-panel").count(), 0);
     await page.close();
+  } finally { await browser.close(); }
+});
+
+test("hidden virtualized comments release their cached row height", async () => {
+  const browser = await chromium.launch({ executablePath, headless: true,
+    args: ["--no-sandbox"] });
+  try {
+    const page = await browser.newPage();
+    await setup(page);
+    await page.waitForFunction(() => window.BetterNEMCommentFilter.getState().state === "ready");
+    await page.locator("#bnem-comment-filter-panel input").uncheck();
+    await page.evaluate(() => {
+      const list = document.getElementById("comments");
+      const hot = document.getElementById("hot");
+      const normal = document.getElementById("normal");
+      list.style.position = "relative";
+      list.style.height = "160px";
+      hot.style.height = normal.style.height = "80px";
+      const hotRow = document.createElement("div");
+      const normalRow = document.createElement("div");
+      hotRow.style.cssText = "position:absolute;top:0;height:80px;width:100%";
+      normalRow.style.cssText = "position:absolute;top:80px;height:80px;width:100%";
+      hot.before(hotRow);
+      hotRow.append(hot);
+      normal.before(normalRow);
+      normalRow.append(normal);
+      const owner = hot["__reactFiber$fixture"].return;
+      const cache = { height: 80, clear() { this.height = 80; } };
+      const parent = { recomputeGridSize() {
+        hotRow.style.height = `${cache.height}px`;
+        normalRow.style.top = `${cache.height}px`;
+        list.style.height = `${cache.height + normal.offsetHeight}px`;
+      } };
+      owner.return = { memoizedProps: { cache, rowIndex: 0, columnIndex: 0, parent },
+        stateNode: { _measure() {
+          cache.height = hot.offsetHeight;
+          parent.recomputeGridSize();
+        } }, return: null };
+    });
+    await page.locator("#bnem-comment-filter-panel input").check();
+    await page.waitForFunction(() => document.getElementById("normal").parentElement.offsetTop === 0);
+    assert.equal(await page.locator("#comments").evaluate((el) => el.offsetHeight), 80);
+    await page.locator("#bnem-comment-filter-panel input").uncheck();
+    await page.waitForFunction(() => document.getElementById("normal").parentElement.offsetTop === 80);
+    assert.equal(await page.locator("#comments").evaluate((el) => el.offsetHeight), 160);
+    await page.locator("#bnem-comment-filter-panel input").check();
+    await page.waitForFunction(() => document.getElementById("normal").parentElement.offsetTop === 0);
+    await page.evaluate(() => document.getElementById("hot").parentElement.remove());
+    await page.locator("#bnem-comment-filter-panel input").uncheck();
+    await page.waitForFunction(() => document.getElementById("normal").parentElement.offsetTop === 80);
+    assert.equal(await page.locator("#comments").evaluate((el) => el.offsetHeight), 160);
   } finally { await browser.close(); }
 });
 
