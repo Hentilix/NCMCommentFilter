@@ -90,8 +90,18 @@ test("client source uses current account and client's bundled blacklist API", as
   modules[15].H = () => { throw new Error("old export now targets an unrelated endpoint"); };
   win.betterncm.ncm.getNCMPackageVersion = () => "83304b1";
   assert.deepEqual([...await api.createNeteaseSource(win).readBlacklist("456")], ["42"]);
+  win.betterncm.ncm.getNCMVersion = () => "3.1.42";
+  win.betterncm.ncm.getNCMBuild = () => 205594;
+  win.betterncm.ncm.getNCMPackageVersion = () => "14827e8";
+  const updatedSource = api.createNeteaseSource(win);
+  assert.equal(updatedSource.getAccountId(), "456");
+  assert.deepEqual([...await updatedSource.readBlacklist(updatedSource.getAccountId())], ["42"]);
+  assert.deepEqual(requested, { userid: "456" });
+  win.betterncm.ncm.getNCMPackageVersion = () => "c6406e5";
+  assert.throws(() => api.createNeteaseSource(win), /热更新.*未验证/);
   win.betterncm.ncm.getNCMPackageVersion = () => "future-patch";
   assert.throws(() => api.createNeteaseSource(win), /热更新.*未验证/);
+  win.betterncm.ncm.getNCMVersion = () => "3.1.41";
   win.betterncm.ncm.getNCMPackageVersion = () => "83304b1";
   win.betterncm.ncm.getNCMBuild = () => 205530;
   assert.throws(() => api.createNeteaseSource(win), /未验证/);

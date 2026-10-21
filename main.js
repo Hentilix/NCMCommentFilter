@@ -115,10 +115,15 @@
 
   function createNeteaseSource(win) {
     const { version, build, packageVersion } = getClientVersion(win);
-    if (version !== "3.1.41" || build !== "205529") {
-      throw new Error(`客户端 ${version || "未知"} / ${build || "未知"} 未验证；仅支持 3.1.41.205529`);
+    const blacklistExports = {
+      "3.1.41.205529": { c6406e5: "H", "83304b1": "K" },
+      // APP_CONF uses this ID; the installed chunk filenames use 1482700000000.
+      "3.1.42.205594": { "14827e8": "K" }
+    }[`${version}.${build}`];
+    if (!blacklistExports) {
+      throw new Error(`客户端 ${version || "未知"} / ${build || "未知"} 未验证；请更新 BetterNEM 评论过滤`);
     }
-    const blacklistExport = { c6406e5: "H", "83304b1": "K" }[packageVersion];
+    const blacklistExport = blacklistExports[packageVersion];
     if (!blacklistExport) throw new Error(`客户端热更新 ${packageVersion || "未知"} 未验证；请更新 BetterNEM`);
     const require = captureWebpackRequire(win);
     const store = require(8)?.a;

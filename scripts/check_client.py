@@ -15,20 +15,38 @@ def main() -> int:
     if not package.is_file():
         print(f"未找到客户端资源包：{package}")
         return 1
-    checks = {
-        "当前账号黑名单接口": ("pub/hybrid/app.chunk.c6406e5.js", b'url:"api/blacklist/get"'),
-        "黑名单模块导出": ("pub/hybrid/app.chunk.c6406e5.js", b'd(t,"H",(function(){return Di'),
-        "按当前账号 ID 请求": ("pub/hybrid/164.chunk.c6406e5.js", b'yield o(r.H,{userid:e})'),
-        "评论卡片标记": ("pub/hybrid/app.chunk.c6406e5.js", b'data-testid":"tid_comment_card"'),
-        "回复数据": ("pub/hybrid/app.chunk.c6406e5.js", b'beReplied:V'),
-        "专辑页面路由": ("pub/hybrid/57.chunk.c6406e5.js", b'G("/album/:id")'),
-        "单曲评论线程路径": ("pub/hybrid/app.chunk.c6406e5.js", b'"R_SO_4_".concat(e)'),
-        "单曲评论页面标记": ("pub/hybrid/74.chunk.c6406e5.js", b'data-testid":"tid_comment_page"'),
-        "单曲评论卡片组件": ("pub/hybrid/74.chunk.c6406e5.js", b'I=n(439)'),
-    }
-    print("仅检查安装包基线 c6406e5；运行时可能使用不同热更新，不能据此判定实时兼容。")
     try:
         with ZipFile(package) as archive:
+            app_files = [name for name in archive.namelist()
+                         if name.startswith("pub/hybrid/app.chunk.") and name.endswith(".js")]
+            if len(app_files) != 1:
+                print("无法唯一识别客户端主资源文件")
+                return 1
+            resource_version = app_files[0].split(".")[-2]
+            profile = {
+                "c6406e5": ("H", "Di", 164, 57),
+                "1482700000000": ("K", "Hi", 168, 58),
+            }.get(resource_version)
+            if not profile:
+                print(f"未验证的安装包资源版本：{resource_version}")
+                return 1
+            export, function, blacklist_chunk, album_chunk = profile
+
+            def chunk(name):
+                return f"pub/hybrid/{name}.chunk.{resource_version}.js"
+
+            checks = {
+                "当前账号黑名单接口": (chunk("app"), f'{function}=Object(o.a)({{url:"api/blacklist/get"'.encode()),
+                "黑名单模块导出": (chunk("app"), f'd(t,"{export}",(function(){{return {function}'.encode()),
+                "按当前账号 ID 请求": (chunk(blacklist_chunk), f'yield o(r.{export},{{userid:e}})'.encode()),
+                "评论卡片标记": (chunk("app"), b'data-testid":"tid_comment_card"'),
+                "回复数据": (chunk("app"), b'beReplied:V'),
+                "专辑页面路由": (chunk(album_chunk), b'G("/album/:id")'),
+                "单曲评论线程路径": (chunk("app"), b'"R_SO_4_".concat(e)'),
+                "单曲评论页面标记": (chunk(74), b'data-testid":"tid_comment_page"'),
+                "单曲评论卡片组件": (chunk(74), b'I=n(439)'),
+            }
+            print(f"检查安装包基线 {resource_version}；运行时可能使用不同热更新，不能据此判定实时兼容。")
             for label, (name, signature) in checks.items():
                 passed = signature in archive.read(name)
                 print(f"{'通过' if passed else '不匹配'}：{label}")

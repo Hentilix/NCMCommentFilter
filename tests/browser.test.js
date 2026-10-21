@@ -55,8 +55,8 @@ async function setup(page, shouldFail = false) {
     window.webpackJsonp = { push(args) {
       args[1][args[2][0][0]]({}, {}, (id) => modules[id]);
     } };
-    window.betterncm = { ncm: { getNCMVersion: () => "3.1.41", getNCMBuild: () => 205529,
-      getNCMPackageVersion: () => "83304b1" } };
+    window.betterncm = { ncm: { getNCMVersion: () => "3.1.42", getNCMBuild: () => 205594,
+      getNCMPackageVersion: () => "14827e8" } };
   }, shouldFail);
   // BetterNCM supplies `plugin` as a function argument, not window.plugin.
   await page.evaluate(async (script) => {
