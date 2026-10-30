@@ -7,12 +7,18 @@
 ## 安装与使用
 
 1. 按 [BetterNCM 官方安装说明](https://github.com/std-microblock/chromatic/wiki/%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E) 安装 BetterNCM。
-2. 将 [`dist/betterncm-comment-filter.plugin`](dist/betterncm-comment-filter.plugin) 放入 BetterNCM 的 `plugins` 目录。更新时替换同名文件。
+2. 将 [`dist/ncm-comment-filter.plugin`](dist/ncm-comment-filter.plugin) 放入 BetterNCM 的 `plugins` 目录。更新时替换同名文件。
 3. 完全退出并重新启动网易云音乐，或使用 BetterNCM 的“重启并重载插件”。仅关闭窗口可能会将程序留在托盘。
 4. 打开专辑或单曲评论区，也可打开播放器中的单曲评论面板。过滤面板会显示黑名单同步状态、本页隐藏数量、开关和“刷新黑名单”按钮。
 5. 修改网易云黑名单后，点击“刷新黑名单”。切换账号后插件会读取新账号的名单。
 
+从旧名 NEMCommentFilter 升级时，请先移除 `plugins` 目录中的 `betternem-comment-filter.plugin` 或 `betterncm-comment-filter.plugin`，再安装新包，避免两个版本同时加载。原有过滤开关设置会继承。
+
+面板标题可以拖动；点击右上角“−”会将面板收起成“+”黑框，点击“+”重新展开。收起后的黑框也可以拖动，过滤功能会继续运行。
+
 停用时可在 BetterNCM 管理器中移除插件并重载，或退出网易云音乐、移除插件包后重新启动。
+
+`docs/acceptance-*.md` 是历史验收记录，其中保留验收当时使用的旧项目名和安装路径。
 
 ## 兼容与失败状态
 

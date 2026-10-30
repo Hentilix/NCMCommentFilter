@@ -1,14 +1,14 @@
-/* BetterNEM comment filter. No credentials or blacklist data are persisted or sent to third parties. */
+/* NCMCommentFilter. No credentials or blacklist data are persisted or sent to third parties. */
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
-  if (root) root.BetterNEM = api;
+  if (root) root.NCMCommentFilterApi = api;
   // BetterNCM executes scripts with a local `plugin` argument.
   if (root && root.document && typeof plugin !== "undefined" && typeof plugin.onLoad === "function") {
     plugin.onLoad(() => {
       const controller = api.createController(root);
       controller.start();
-      root.BetterNEMCommentFilter = controller;
+      root.NCMCommentFilter = controller;
     });
   }
 })(typeof window === "undefined" ? null : window, function () {
@@ -18,9 +18,9 @@
   const ALBUM_CONTAINER = '[data-testid="tid_scroll_container"]';
   const SONG_CONTAINER = '[data-testid="tid_comment_page"]';
   const VINYL_CONTAINER = '[data-testid="tid_vinyl_commentarea"]';
-  const HIDDEN_CLASS = "bnem-comment-hidden";
-  const STYLE_ID = "bnem-comment-filter-style";
-  const PANEL_ID = "bnem-comment-filter-panel";
+  const HIDDEN_CLASS = "ncmcf-comment-hidden";
+  const STYLE_ID = "ncmcf-comment-filter-style";
+  const PANEL_ID = "ncmcf-comment-filter-panel";
   const ACCOUNT_CHECK_MS = 30000;
   const REQUEST_TIMEOUT_MS = 10000;
 
@@ -121,10 +121,10 @@
       "3.1.42.205594": { "14827e8": "K" }
     }[`${version}.${build}`];
     if (!blacklistExports) {
-      throw new Error(`客户端 ${version || "未知"} / ${build || "未知"} 未验证；请更新 BetterNEM 评论过滤`);
+      throw new Error(`客户端 ${version || "未知"} / ${build || "未知"} 未验证；请更新 NCMCommentFilter`);
     }
     const blacklistExport = blacklistExports[packageVersion];
-    if (!blacklistExport) throw new Error(`客户端热更新 ${packageVersion || "未知"} 未验证；请更新 BetterNEM`);
+    if (!blacklistExport) throw new Error(`客户端热更新 ${packageVersion || "未知"} 未验证；请更新 NCMCommentFilter`);
     const require = captureWebpackRequire(win);
     const store = require(8)?.a;
     const getBlacklist = require(15)?.[blacklistExport];
@@ -183,6 +183,8 @@
     let unlisten = null;
     let unwatchAccount = null;
     let panel = null;
+    let stopPanelDrag = null;
+    let clampPanelOnResize = null;
     let statusElement = null;
     let countElement = null;
     let toggle = null;
@@ -317,7 +319,7 @@
       refreshButton.disabled = state === "loading" || !source;
       statusElement.textContent = stateMessage;
       statusElement.dataset.state = state;
-      doc.documentElement.classList.toggle("bnem-comment-pending",
+      doc.documentElement.classList.toggle("ncmcf-comment-pending",
         active && enabled && state === "loading" && !blacklist);
       updateCount();
     }
@@ -449,30 +451,50 @@
       style.id = STYLE_ID;
       style.textContent = `
         .${HIDDEN_CLASS}{display:none!important}
-        html.bnem-comment-pending ${ALBUM_CONTAINER} ${CARD_SELECTOR},
-        html.bnem-comment-pending ${SONG_CONTAINER} ${CARD_SELECTOR},
-        html.bnem-comment-pending ${VINYL_CONTAINER} ${CARD_SELECTOR}{visibility:hidden!important}
+        html.ncmcf-comment-pending ${ALBUM_CONTAINER} ${CARD_SELECTOR},
+        html.ncmcf-comment-pending ${SONG_CONTAINER} ${CARD_SELECTOR},
+        html.ncmcf-comment-pending ${VINYL_CONTAINER} ${CARD_SELECTOR}{visibility:hidden!important}
         #${PANEL_ID}{position:fixed;right:18px;bottom:110px;z-index:2147483000;width:218px;
           padding:10px 12px;border-radius:10px;background:rgba(34,34,34,.94);color:#fff;
           box-shadow:0 3px 14px #0005;font:12px/1.5 sans-serif}
         #${PANEL_ID}[hidden]{display:none!important}
-        #${PANEL_ID} .bnem-title{font-weight:600;margin-bottom:6px}
-        #${PANEL_ID} .bnem-row{display:flex;align-items:center;justify-content:space-between;gap:6px}
+        #${PANEL_ID} .ncmcf-header{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px}
+        #${PANEL_ID} .ncmcf-title{font-weight:600;cursor:move;user-select:none;touch-action:none;flex:1}
+        #${PANEL_ID} .ncmcf-row{display:flex;align-items:center;justify-content:space-between;gap:6px}
         #${PANEL_ID} button{color:#fff;background:#444;border:0;border-radius:5px;padding:3px 7px;cursor:pointer}
+        #${PANEL_ID} button:focus-visible{outline:2px solid #fff;outline-offset:2px}
         #${PANEL_ID} button:disabled{opacity:.5;cursor:default}
-        #${PANEL_ID} .bnem-status{margin-top:6px;overflow-wrap:anywhere;color:#bbb}
-        #${PANEL_ID} .bnem-status[data-state="error"],#${PANEL_ID} .bnem-status[data-state="partial"]{color:#ffcb80}
-        #${PANEL_ID} .bnem-count{margin-top:3px}`;
+        #${PANEL_ID} .ncmcf-status{margin-top:6px;overflow-wrap:anywhere;color:#bbb}
+        #${PANEL_ID} .ncmcf-status[data-state="error"],#${PANEL_ID} .ncmcf-status[data-state="partial"]{color:#ffcb80}
+        #${PANEL_ID} .ncmcf-count{margin-top:3px}
+        #${PANEL_ID}.ncmcf-collapsed{width:32px;height:32px;padding:0;border-radius:6px}
+        #${PANEL_ID}.ncmcf-collapsed .ncmcf-header,#${PANEL_ID}.ncmcf-collapsed .ncmcf-row,
+        #${PANEL_ID}.ncmcf-collapsed .ncmcf-status,#${PANEL_ID}.ncmcf-collapsed .ncmcf-count{display:none}
+        #${PANEL_ID} .ncmcf-expand{display:none}
+        #${PANEL_ID}.ncmcf-collapsed .ncmcf-expand{display:block;width:100%;height:100%;padding:0;
+          background:transparent;font-size:22px;line-height:1;touch-action:none}`;
       (doc.head || doc.documentElement).append(style);
 
       panel = doc.createElement("section");
       panel.id = PANEL_ID;
-      panel.setAttribute("aria-label", "BetterNEM 评论过滤");
+      panel.setAttribute("aria-label", "NCMCommentFilter");
       const title = doc.createElement("div");
-      title.className = "bnem-title";
-      title.textContent = "BetterNEM 评论过滤";
+      title.className = "ncmcf-title";
+      title.textContent = "NCMCommentFilter";
+      const header = doc.createElement("div");
+      header.className = "ncmcf-header";
+      const minimizeButton = doc.createElement("button");
+      minimizeButton.type = "button";
+      minimizeButton.textContent = "−";
+      minimizeButton.setAttribute("aria-label", "最小化");
+      header.append(title, minimizeButton);
+      const expandButton = doc.createElement("button");
+      expandButton.type = "button";
+      expandButton.className = "ncmcf-expand";
+      expandButton.textContent = "+";
+      expandButton.setAttribute("aria-label", "展开");
       const row = doc.createElement("div");
-      row.className = "bnem-row";
+      row.className = "ncmcf-row";
       const label = doc.createElement("label");
       toggle = doc.createElement("input");
       toggle.type = "checkbox";
@@ -482,14 +504,66 @@
       refreshButton.textContent = "刷新黑名单";
       row.append(label, refreshButton);
       statusElement = doc.createElement("div");
-      statusElement.className = "bnem-status";
+      statusElement.className = "ncmcf-status";
       countElement = doc.createElement("div");
-      countElement.className = "bnem-count";
-      panel.append(title, row, statusElement, countElement);
+      countElement.className = "ncmcf-count";
+      panel.append(header, row, statusElement, countElement, expandButton);
       doc.body.append(panel);
+      function keepPanelInView(left, top) {
+        panel.style.right = "auto";
+        panel.style.bottom = "auto";
+        panel.style.left = `${Math.max(0, Math.min(left, win.innerWidth - panel.offsetWidth))}px`;
+        panel.style.top = `${Math.max(0, Math.min(top, win.innerHeight - panel.offsetHeight))}px`;
+      }
+      function clampDraggedPanel() {
+        if (panel.style.left) keepPanelInView(panel.offsetLeft, panel.offsetTop);
+      }
+      let moved = false;
+      function beginDrag(event) {
+        if (event.button !== 0) return;
+        moved = false;
+        const origin = panel.getBoundingClientRect();
+        const startX = event.clientX;
+        const startY = event.clientY;
+        stopPanelDrag?.();
+        function onMove(move) {
+          if (move.pointerId !== event.pointerId) return;
+          if (Math.abs(move.clientX - startX) + Math.abs(move.clientY - startY) > 3) moved = true;
+          if (moved) keepPanelInView(origin.left + move.clientX - startX,
+            origin.top + move.clientY - startY);
+        }
+        function stop() {
+          win.removeEventListener("pointermove", onMove);
+          win.removeEventListener("pointerup", stop);
+          win.removeEventListener("pointercancel", stop);
+          win.removeEventListener("blur", stop);
+          stopPanelDrag = null;
+        }
+        stopPanelDrag = stop;
+        win.addEventListener("pointermove", onMove);
+        win.addEventListener("pointerup", stop);
+        win.addEventListener("pointercancel", stop);
+        win.addEventListener("blur", stop);
+      }
+      title.addEventListener("pointerdown", beginDrag);
+      expandButton.addEventListener("pointerdown", beginDrag);
+      minimizeButton.addEventListener("click", () => {
+        panel.classList.add("ncmcf-collapsed");
+        clampDraggedPanel();
+      });
+      expandButton.addEventListener("click", (event) => {
+        if (moved && event.detail !== 0) {
+          moved = false;
+          return;
+        }
+        panel.classList.remove("ncmcf-collapsed");
+        clampDraggedPanel();
+      });
+      clampPanelOnResize = clampDraggedPanel;
+      win.addEventListener("resize", clampPanelOnResize);
       toggle.addEventListener("change", () => {
         enabled = toggle.checked;
-        try { win.localStorage.setItem("betternem.commentFilter.enabled", enabled ? "1" : "0"); }
+        try { win.localStorage.setItem("ncmCommentFilter.enabled", enabled ? "1" : "0"); }
         catch { /* localStorage may be unavailable in the client */ }
         if (!enabled) restoreAll();
         else scanAll();
@@ -500,7 +574,11 @@
 
     function start() {
       if (observer) return;
-      try { enabled = win.localStorage.getItem("betternem.commentFilter.enabled") !== "0"; }
+      try {
+        // Keep the switch preference from releases before the project was renamed.
+        enabled = (win.localStorage.getItem("ncmCommentFilter.enabled") ??
+          win.localStorage.getItem("betternem.commentFilter.enabled")) !== "0";
+      }
       catch { enabled = true; }
       createPanel();
       scope = currentScope();
@@ -541,10 +619,13 @@
       unwatchAccount = null;
       win.removeEventListener("popstate", routeChanged);
       win.removeEventListener("hashchange", routeChanged);
+      stopPanelDrag?.();
+      if (clampPanelOnResize) win.removeEventListener("resize", clampPanelOnResize);
+      clampPanelOnResize = null;
       restoreAll();
       if (measureFrame != null) win.cancelAnimationFrame(measureFrame);
       flushMeasurements();
-      doc.documentElement.classList.remove("bnem-comment-pending");
+      doc.documentElement.classList.remove("ncmcf-comment-pending");
       panel?.remove();
       doc.getElementById(STYLE_ID)?.remove();
       panel = null;
