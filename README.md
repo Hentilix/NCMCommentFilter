@@ -18,6 +18,8 @@
 
 停用时可在 BetterNCM 管理器中移除插件并重载，或退出网易云音乐、移除插件包后重新启动。
 
+在 BetterNCM 管理器中打开本插件的设置页，可点击“源代码仓库”和“问题反馈”，通过外部浏览器访问 [GitHub 仓库](https://github.com/Hentilix/NCMCommentFilter) 和 [Issues](https://github.com/Hentilix/NCMCommentFilter/issues)。作者：Hentilix。
+
 `docs/acceptance-*.md` 是历史验收记录，其中保留验收当时使用的旧项目名和安装路径。
 
 ## 兼容与失败状态

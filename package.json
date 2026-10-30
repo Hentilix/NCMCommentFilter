@@ -1,6 +1,6 @@
 {
   "name": "ncm-comment-filter",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "BetterNCM album and song comment filter for NetEase Cloud Music 3.1.41 and 3.1.42",
   "scripts": {

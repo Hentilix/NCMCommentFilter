@@ -10,6 +10,36 @@
       controller.start();
       root.NCMCommentFilter = controller;
     });
+    if (typeof plugin.onConfig === "function") plugin.onConfig(() => {
+      const section = root.document.createElement("section");
+      section.className = "ncmcf-settings";
+      section.setAttribute("aria-label", "NCMCommentFilter 设置");
+      section.innerHTML = `
+        <style>
+          .ncmcf-settings{padding:16px;line-height:1.6;color:inherit;font-family:inherit}
+          .ncmcf-settings h2{margin:0 0 8px;font-size:20px}
+          .ncmcf-settings p{margin:8px 0}
+          .ncmcf-settings nav{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px}
+          .ncmcf-settings a{display:inline-block;padding:8px 12px;border:1px solid currentColor;
+            border-radius:5px;color:inherit;text-decoration:underline;text-underline-offset:3px}
+          .ncmcf-settings a:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+        </style>
+        <h2>NCMCommentFilter</h2>
+        <p>作者：Hentilix</p>
+        <p>按当前账号的用户黑名单过滤专辑和单曲评论。开关和刷新黑名单按钮位于评论区的过滤面板。</p>
+        <nav aria-label="源码与反馈">
+          <a href="https://github.com/Hentilix/NCMCommentFilter">源代码仓库</a>
+          <a href="https://github.com/Hentilix/NCMCommentFilter/issues">问题反馈</a>
+        </nav>
+        <p>链接将在外部浏览器中打开。</p>`;
+      for (const link of section.querySelectorAll("a")) {
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          root.betterncm.ncm.openUrl(link.href);
+        });
+      }
+      return section;
+    });
   }
 })(typeof window === "undefined" ? null : window, function () {
   "use strict";

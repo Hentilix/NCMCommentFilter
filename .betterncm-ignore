@@ -1,0 +1,12 @@
+/.git/
+/.github/
+/.local/
+/node_modules/
+/tests/
+/docs/
+/scripts/
+/dist/
+/.gitignore
+/package.json
+/package-lock.json
+/README.md
